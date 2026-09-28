@@ -1,43 +1,121 @@
 # Order Book & Matching Engine
 
-An Order Book is a data structure used in financial markets to keep track of all buy and sell orders for a particular asset, such as stocks, bonds, or cryptocurrencies. It helps market participants know the available orders and their prices, facilitating the matching of buyers with sellers. 
+A single-instrument limit order book with a matching engine, written in modern C++.
+Built iteratively: every design decision is measured against a reproducible benchmark
+before and after, and correctness is checked by unit scenarios and randomized invariants.
+ 
+**Current version:** `v0.2-price-levels` (see [Version history](#version-history)).
 
-We will iterate on multiple versions. This README documents V1 (a naive implementation of the Order Book Object).
+## Features
+ 
+- Price-time priority: best price first, then arrival order within a price level
+- Order types: `GTC` (remainder rests in the book) and `IOC` (remainder is dropped);
+  `FOK` is declared but **not implemented yet**
+- Cancel by order ID
+- Trades execute at the price of the resting order
 
 ## Build & Run
  
 ```bash
-g++ -O2 -std=c++17 main.cpp -o bench
+g++ -O2 -std=c++17 main.cpp order_book.cpp -o bench
+ 
+./bench --test                               # 5 deterministic scenarios, 35 checks
+./bench <orders> <ioc%>                      # random flow, historical price model (101 levels)
+./bench <orders> <ioc%> <levels> <aggr%>     # deep-book model (see Benchmarks)g++ -O2 -std=c++17 main.cpp -o bench
 ./bench <order_number>   # default : 1000
 ```
 
-## Arcitecture (V1)
-
-- `Order` : represents an individual Order (id, type, side, price, quantity)
-- `OrderBook` : keeps every orders in an unique `std::vector<Order>`, with an `std::unordered_map<int, int>` (order_id -> index) for direct access by ID
-- **Supported Types** `GTC` (Good-Til-Cancelled, order stays in the book) and `IOC` (Immediate-Or-Cancel, is cancelled after matching). `FOK`exists as a type but is not yet tested or implemented.
+Verbose output (submitted orders and trades) is printed automatically when `<orders> <= 20`.
+ 
+Run under sanitizers (recommended after any change to the data structures):
+ 
+```bash
+g++ -O1 -g -std=c++17 -fsanitize=address,undefined main.cpp order_book.cpp -o bench_san
+./bench_san --test && ./bench_san 20000 30 1000 10
+```
 
 ## Design
+ 
+| Structure | Type | Role |
+|---|---|---|
+| Sell side | `std::map<double, std::list<Order>>` | price levels, best ask = `begin()` |
+| Buy side | `std::map<double, std::list<Order>>` | price levels, best bid = `rbegin()` |
+| Index | `std::unordered_map<int, OrderLocation>` | order ID → (side, price, list iterator) |
+ 
+- **Why `std::list` per level:** its iterators stay valid when other elements are inserted
+  or erased, so an order can be removed in O(1) from a stored iterator without invalidating
+  the index entries of the other orders.
+- **Matching happens before insertion.** An incoming order is matched against the opposite
+  side first; only the remaining quantity of a `GTC` order is inserted. An `IOC` remainder
+  is discarded.
+- **The matching loop re-reads the best level at every iteration** and never keeps an
+  iterator across an erase.
+- **One removal path** (`cancelOrder`) is used both for user cancels and for fully filled
+  orders, so the price-level map and the index cannot get out of sync.
 
-This version is purposefully naive. **No adapted data structures are used**. The goal is to get a functionnal implementation without worries for optimisation. We have benchmarked this implementation. This will serve as a baseline for out future implementations and allow us to identify where optimisations bring most values.
+### Complexity
+ 
+`N` = resting orders, `L` = distinct price levels.
+ 
+| Operation | Time |
+|---|---|
+| Add an order that does not cross | O(log L) |
+| Match | O(1) per trade + O(log L) per fully filled resting order |
+| Cancel by ID | O(log L) (hash lookup and list erase are O(1); locating the level is O(log L)) |
+| Space | O(N + L) |
+ 
+## Correctness
+ 
+- **Unit scenarios** (`--test`): non-crossing sell, cancel of an unknown / already cancelled
+  ID and of a non-integer price, multi-level sweep with FIFO priority and partial fill,
+  IOC remainder never resting, sell crossing several bids.
+- **Randomized invariants**, checked after every benchmark run:
+  - *Conservation*: for each side, `submitted = traded + resting + cancelled + dropped(IOC)`.
+    With 0 % IOC the dropped quantity must be exactly 0.
+  - *Index consistency*: the index holds exactly the orders present in the price levels.
+  - *Idempotent cancel*: cancelling the same IDs twice leaves the book unchanged.
 
-## Benchmarks (V1)
+## Benchmarks (V2)
 
-| Orders | Insertions | Insertion / order | Matching  | Total     |
-|-------:|------------------:|-------------------:|----------:|----------:|
-| 10     | 96 µs               | 9.6 µs             | 2 µs      | 98 µs      |
-| 1 000  | 487 µs             | 0.487 µs           | 5855 µs    | 6342 µs    |
-| 5000 | 2426 µs | 0.4852 µs | 113976 µs | 116402 µs
-
-As expected, this implementation performs poorly with the **O(n^2) Matching** being the main bottleneck.
+**Method.** Single thread, `-O2`, `std::chrono`, fixed seed (42) so every run replays the
+same order flow. Insertion and matching are measured together (matching happens on
+arrival). Cancel timing covers only orders that are actually resting.
+ 
+**Machine.** Linux x86-64, `g++ 15.2.0`, CPU `Intel(R) Core(TM) i5-4670 CPU @ 3.40GHz`.
+ 
+**Deep-book workload** (`./bench 200000 0 <L> 5`): 200,000 orders, 0 % IOC. Passive buys
+are placed below a mid price and passive sells above it (so they do not cross); 5 % of
+orders are aggressive and cross the book. About 180,000 orders remain resting, and about
+19,000 trades are executed per run.
+ 
+| Price levels (L) | µs / order | Resting orders | Levels per side | µs / cancel |
+|---:|---:|---:|---:|---:|
+| 100 | 0.211 | 180,153 | 50 | 0.128 |
+| 1,000 | 0.278 | 180,332 | 485 | 0.179 |
+| 10,000 | 0.401 | 180,200 | ~4,760 | 0.282 |
+| 100,000 | 0.567 | 180,350 | ~40,400 | 0.601 |
+ 
+Conservation, index consistency and idempotent cancel hold on every run above.
+ 
+**Reading the numbers.**
+- The cost per order grows slowly with L (×2.7 for ×1000 more levels).
+- The increment per decade of L is +0.07, +0.12, +0.17 µs. A pure O(log L) term would add a
+  constant amount per decade, so growth beyond that is consistent with memory effects
+  (more distinct nodes touched per operation). This is an inference, **not yet profiled**
+  (`perf` / `cachegrind` are on the roadmap).
+- Cancels degrade faster than inserts (×4.7): each cancel touches a hash node, a list node
+  and a map node scattered in memory.
+**Caveats.** One run per point. Synthetic, symmetric flow around a single mid price. Not
+comparable with the `v0.1-naive` numbers (different price model, and matching then ran as
+a batch pass after all insertions).
 
 ## Limitations
 
-- **Matching O(n^2)** : currently we have a double loop on all buyers and sellers.
-- **Vector never cleaned**: I used lazy deletion with a flag `cancelled` instead of really modifying the vector. This should change
-- **Order Map** : The map is currently useless with the lazy deletion, there is no need to get orders by id in the current implementation.
-- **No price-time priority** : The same price orders are not sorted by "arrival time".
-- **Precision loss** : `priceMatch()` method silently removes the decimal precision by casting to `int`.
-- **No correction/validation**: right now the validation is only visual if you have less than 20 orders (verbose mode on). There should be a verification as part of the test to ensure we are doing the correct matching logic.
+- `FOK` is not implemented (declared in the enum only).
+- Not thread-safe; single instrument.
+- All three containers are node-based (`std::map`, `std::list`, `std::unordered_map`):
+  one heap allocation per resting order and per price level, poor spatial locality.
+- The benchmark flow is synthetic and does not model bursts, cancels of deep orders,
+  or realistic price dynamics.
 
 These are all amelioration vectors for the next implementation.
