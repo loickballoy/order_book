@@ -77,6 +77,11 @@ g++ -O1 -g -std=c++17 -fsanitize=address,undefined main.cpp order_book.cpp -o be
 
 ## Benchmarks (V2)
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/bench-dark.svg">
+  <img alt="Mean latency per order: 0.21 µs at 100 price levels up to 0.57 µs at 100,000" src="docs/bench-light.svg" width="100%">
+</picture>
+
 **Method.** Single thread, `-O2`, `std::chrono`, fixed seed (42) so every run replays the
 same order flow. Insertion and matching are measured together (matching happens on
 arrival). Cancel timing covers only orders that are actually resting.
