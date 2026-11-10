@@ -4,6 +4,7 @@
 #include <list>
 #include <map>
 #include <unordered_map>
+#include <memory_resource>
 
 enum Side {
     BUY = 0,
@@ -84,9 +85,13 @@ private:
     long long tradeCount = 0;
     long long tradedQty = 0;
 
-    std::unordered_map<int, OrderLocation> orderMap;
-    std::map<double, std::list<Order>> sellOrderMap;   // meilleur prix (le plus bas) : begin()
-    std::map<double, std::list<Order>> buyOrderMap;    // meilleur prix (le plus haut) : rbegin()
+    std::pmr::unsynchronized_pool_resource orderPool;
+    std::pmr::unsynchronized_pool_resource sellOrderPool;
+    std::pmr::unsynchronized_pool_resource buyOrderPool;
+
+    std::pmr::unordered_map<int, OrderLocation> orderMap{&orderPool};
+    std::pmr::map<double, std::list<Order>> sellOrderMap{&sellOrderPool};   // meilleur prix (le plus bas) : begin()
+    std::pmr::map<double, std::list<Order>> buyOrderMap{&buyOrderPool};    // meilleur prix (le plus haut) : rbegin()
 
     int matchOrder(Order order, OrderType type);
     int matchIocOrder(Order order);

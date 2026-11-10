@@ -114,6 +114,71 @@ Conservation, index consistency and idempotent cancel hold on every run above.
 comparable with the `v0.1-naive` numbers (different price model, and matching then ran as
 a batch pass after all insertions).
 
+## Latency per operation
+
+Measured with `bench_latency.cpp` and `latency.hpp`, a separate program (`main.cpp` is unchanged).
+The measurement harness was written with an AI assistant; the order book it measures, the
+scenarios and the runs are mine. Raw output: [`docs/latency-results.txt`](docs/latency-results.txt).
+
+```bash
+g++ -O2 -std=c++17 bench_latency.cpp order_book.cpp -o latency
+taskset -c 2 ./latency <orders> <ioc%> <levels> <aggressive%> <runs>
+```
+
+**Method.** One `steady_clock` timestamp pair around each `addOrder` / `cancelOrder`. Samples go
+into preallocated vectors, so nothing is allocated inside the timed region. One warm-up run is
+discarded, then each percentile is the median across 5 runs; max is the worst sample across runs.
+Same generator and seed (42) as the throughput benchmark. The timer costs 16 ns per pair on this
+machine; it is included in every sample, not subtracted.
+
+**Categories.** *Aggressive*: the order produced at least one trade. *No trade*: every other
+order, i.e. GTC orders that rest in the book and IOC orders that did not cross (dropped without
+being inserted). The raw output labels this category "Insertion passive". *Cancel*: one resting
+order in three, cancelled after all insertions.
+
+**Machine.** Intel Core i5-4670 @ 3.40 GHz, Linux x86-64, g++ 15.2.0, `-O2`, pinned to one core.
+
+| # | Orders / IOC / levels / aggressive | Category | n | p50 (ns) | p99 (ns) | p99.9 (ns) | max (µs) |
+|---|---|---|---:|---:|---:|---:|---:|
+| 1 | 200k / 0 % / 50 / 5 % | No trade | 189,943 | 122 | 1,292 | 1,600 | 3,845 |
+| | | Aggressive | 10,057 | 117 | 788 | 1,320 | 10.2 |
+| | | Cancel | 60,032 | 112 | 313 | 501 | 20.1 |
+| 2 | 200k / 20 % / 50 / 5 % | No trade | 189,976 | 125 | 244 | 429 | 1,823 |
+| | | Aggressive | 10,024 | 124 | 836 | 1,470 | 10.8 |
+| | | Cancel | 47,150 | 129 | 403 | 608 | 30.4 |
+| 3 | 200k / 0 % / 500 / 5 % | No trade | 190,022 | 177 | 1,375 | 2,921 | 4,039 |
+| | | Aggressive | 9,978 | 147 | 598 | 1,219 | 10.1 |
+| | | Cancel | 60,091 | 140 | 360 | 553 | 43.4 |
+| 4 | 200k / 0 % / 500 / 50 % | No trade | 114,452 | 190 | 398 | 682 | 1,092 |
+| | | Aggressive | 85,548 | 151 | 527 | 750 | 31.1 |
+| | | Cancel | 14,301 | 183 | 428 | 589 | 21.6 |
+| 5 | 200k / 20 % / 500 / 50 % | No trade | 118,068 | 173 | 289 | 475 | 422 |
+| | | Aggressive | 81,932 | 149 | 501 | 696 | 15.0 |
+| | | Cancel | 9,063 | 163 | 324 | 492 | 15.0 |
+| 6 | 200k / 0 % / 50 / 50 % | No trade | 113,790 | 158 | 403 | 630 | 496 |
+| | | Aggressive | 86,210 | 140 | 483 | 701 | 14.9 |
+| | | Cancel | 13,865 | 158 | 356 | 533 | 15.9 |
+
+**Reading the numbers.**
+- Medians stay between 112 and 190 ns in every scenario and category, timer included. Going
+  from 50 to 500 price levels raises the no-trade median from 122 to 177 ns (scenarios 1 → 3)
+  and from 158 to 190 ns under an aggressive flow (scenarios 6 → 4).
+- The no-trade p99 is about 1.3 µs in scenarios 1 and 3, where about 95 % of orders rest and
+  the book grows to roughly 180,000 resting orders, and 244 to 403 ns elsewhere. Scenario 6
+  changes only the aggressive share compared with scenario 1 (5 % → 50 %): the no-trade p99
+  falls from 1,292 to 403 ns and the max from 3.8 ms to 0.5 ms. This points to the size of the
+  resting book (node allocation, order index) rather than to the matching itself. It is a
+  correlation, **not yet profiled**. In scenarios 2 and 5, cheap dropped IOC orders may also
+  dilute the no-trade category.
+- Max values reach about 4 ms, far above p99.9, and are largest where the book grows most.
+  Likely candidates are rehashes of the `std::unordered_map` order index, page faults on new
+  nodes and OS preemption. Also **not yet profiled**; reserving the index capacity up front is
+  the first experiment.
+
+**Caveats.** One machine, synthetic flow. Scenarios 1 to 5 ran in one session, scenario 6 in a
+second session on the same machine. Prices are still `double`; integer ticks are planned for v0.3.
+
+
 ## Limitations
 
 - `FOK` is not implemented (declared in the enum only).
