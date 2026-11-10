@@ -4,7 +4,7 @@ A single-instrument limit order book with a matching engine, written in modern C
 Built iteratively: every design decision is measured against a reproducible benchmark
 before and after, and correctness is checked by unit scenarios and randomized invariants.
  
-**Current version:** `v0.2-price-levels` (see [Version history](#version-history)).
+**Current version:** `v0.2.1-latency` (see [Version history](#version-history)).
 
 ## Features
  
@@ -18,11 +18,12 @@ before and after, and correctness is checked by unit scenarios and randomized in
  
 ```bash
 g++ -O2 -std=c++17 main.cpp order_book.cpp -o bench
- 
+g++ -O2 -std=c++17 bench_latency.cpp order_book.cpp -o latency
+
 ./bench --test                               # 5 deterministic scenarios, 35 checks
 ./bench <orders> <ioc%>                      # random flow, historical price model (101 levels)
-./bench <orders> <ioc%> <levels> <aggr%>     # deep-book model (see Benchmarks)g++ -O2 -std=c++17 main.cpp -o bench
-./bench <order_number>   # default : 1000
+./bench <orders> <ioc%> <levels> <aggr%>     # deep-book model (see Benchmarks)
+taskset -c 2 ./latency <orders> <ioc%> <levels> <aggr%> <runs>   # see Latency per operation
 ```
 
 Verbose output (submitted orders and trades) is printed automatically when `<orders> <= 20`.
@@ -162,7 +163,8 @@ order in three, cancelled after all insertions.
 **Reading the numbers.**
 - Medians stay between 112 and 190 ns in every scenario and category, timer included. Going
   from 50 to 500 price levels raises the no-trade median from 122 to 177 ns (scenarios 1 → 3)
-  and from 158 to 190 ns under an aggressive flow (scenarios 6 → 4).
+  and from 158 to 190 ns under an aggressive flow (scenarios 6 → 4).   These medians sit below the throughput means of the previous section (0.21 µs at 100 levels)
+  because a mean includes the long tail (p99 up to 1.4 µs, max up to 4 ms).
 - The no-trade p99 is about 1.3 µs in scenarios 1 and 3, where about 95 % of orders rest and
   the book grows to roughly 180,000 resting orders, and 244 to 403 ns elsewhere. Scenario 6
   changes only the aggressive share compared with scenario 1 (5 % → 50 %): the no-trade p99
@@ -178,6 +180,13 @@ order in three, cancelled after all insertions.
 **Caveats.** One machine, synthetic flow. Scenarios 1 to 5 ran in one session, scenario 6 in a
 second session on the same machine. Prices are still `double`; integer ticks are planned for v0.3.
 
+## Version history
+
+| Tag | Change |
+|---|---|
+| `v0.1-naive` | First implementation: lazy deletion, matching as a batch pass after all insertions |
+| `v0.2-price-levels` | Price-level maps with per-level FIFO queues, cancel by ID, invariant harness, deep-book benchmark |
+| `v0.2.1-latency` | Per-operation latency benchmark (p50 / p99 / p99.9); engine unchanged |
 
 ## Limitations
 
