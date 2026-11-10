@@ -1,0 +1,42 @@
+
+--- Latence par opération (200000 ordres, 0% IOC, 50 niveaux, 5% agressifs) ---
+Médiane de chaque percentile sur 5 runs (1 run d'échauffement non compté)
+Insertion passive  : n=189943  p50   121 ns  p99   1288 ns  p99.9    2441 ns  max  3820514 ns
+Ordre agressif     : n=10057   p50   117 ns  p99    778 ns  p99.9    1311 ns  max     9931 ns
+Annulation         : n=60032   p50   112 ns  p99    319 ns  p99.9     498 ns  max    10098 ns
+Coût du chrono     : 16 ns par mesure (inclus, non soustrait)
+
+--- Latence par opération (200000 ordres, 20% IOC, 50 niveaux, 5% agressifs) ---
+Médiane de chaque percentile sur 5 runs (1 run d'échauffement non compté)
+Insertion passive  : n=189976  p50   122 ns  p99    248 ns  p99.9     440 ns  max  2109202 ns
+Ordre agressif     : n=10024   p50   124 ns  p99    826 ns  p99.9    1299 ns  max    10923 ns
+Annulation         : n=47150   p50   127 ns  p99    392 ns  p99.9     603 ns  max    10076 ns
+Coût du chrono     : 16 ns par mesure (inclus, non soustrait)
+
+--- Latence par opération (200000 ordres, 0% IOC, 500 niveaux, 5% agressifs) ---
+Médiane de chaque percentile sur 5 runs (1 run d'échauffement non compté)
+Insertion passive  : n=190022  p50   179 ns  p99   1387 ns  p99.9    2781 ns  max  4193699 ns
+Ordre agressif     : n=9978    p50   150 ns  p99    653 ns  p99.9    1286 ns  max    11250 ns
+Annulation         : n=60091   p50   142 ns  p99    370 ns  p99.9     574 ns  max    31353 ns
+Coût du chrono     : 16 ns par mesure (inclus, non soustrait)
+
+--- Latence par opération (200000 ordres, 0% IOC, 500 niveaux, 50% agressifs) ---
+Médiane de chaque percentile sur 5 runs (1 run d'échauffement non compté)
+Insertion passive  : n=114452  p50   191 ns  p99    338 ns  p99.9     526 ns  max  1112575 ns
+Ordre agressif     : n=85548   p50   149 ns  p99    525 ns  p99.9     729 ns  max    19308 ns
+Annulation         : n=14301   p50   189 ns  p99    438 ns  p99.9     592 ns  max    14286 ns
+Coût du chrono     : 16 ns par mesure (inclus, non soustrait)
+
+--- Latence par opération (200000 ordres, 20% IOC, 500 niveaux, 50% agressifs) ---
+Médiane de chaque percentile sur 5 runs (1 run d'échauffement non compté)
+Insertion passive  : n=118068  p50   171 ns  p99    302 ns  p99.9     484 ns  max   483010 ns
+Ordre agressif     : n=81932   p50   149 ns  p99    509 ns  p99.9     724 ns  max    21224 ns
+Annulation         : n=9063    p50   167 ns  p99    346 ns  p99.9     517 ns  max    11322 ns
+Coût du chrono     : 16 ns par mesure (inclus, non soustrait)
+
+--- Latence par opération (200000 ordres, 0% IOC, 50 niveaux, 50% agressifs) ---
+Médiane de chaque percentile sur 5 runs (1 run d'échauffement non compté)
+Insertion passive  : n=113790  p50   158 ns  p99    315 ns  p99.9     601 ns  max   369782 ns
+Ordre agressif     : n=86210   p50   141 ns  p99    476 ns  p99.9     658 ns  max    14205 ns
+Annulation         : n=13865   p50   153 ns  p99    333 ns  p99.9     516 ns  max    28187 ns
+Coût du chrono     : 16 ns par mesure (inclus, non soustrait)
